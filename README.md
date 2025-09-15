@@ -1,6 +1,6 @@
 # 🍎 UCAS课程选择模拟器
 
-一个具有苹果日历风格界面的中科院大学选课模拟器，支持课程搜索、时间冲突检查和课程表导出功能。
+中国科学院大学选课模拟器，支持课程搜索、时间冲突检查和课程表导出功能。
 
 ## ✨ 功能特性
 
@@ -203,13 +203,7 @@ pip install reportlab
 
 本项目采用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
 
-## 📧 联系方式
-
-如有问题或建议，请通过以下方式联系：
-
-- 提交Issue: [GitHub Issues](https://github.com/your-username/ucas_course_select_monitor/issues)
-- 邮箱: your-email@example.com
-
----
+## 其他
+本项目由claude sonnet4全程开发，感谢AI，三小时就能完成该项目。如有什么bug，请优先自己使用AI或自审查代码解决，如提交issue不一定能及时更新。
 
 ⭐ 如果这个项目对你有帮助，请给它一个star！
