@@ -1,0 +1,19 @@
+# UCAS课程选择模拟器依赖包
+
+# 核心GUI框架
+PyQt5>=5.15.0
+
+# 数据处理
+pandas>=1.3.0
+
+# PDF生成 (可选，用于PDF导出)
+reportlab>=3.6.0
+
+# 其他工具包 (已包含在Python标准库中)
+# sqlite3 - 数据库操作
+# logging - 日志记录
+# datetime - 时间处理
+# csv - CSV文件处理
+# json - JSON文件处理
+# re - 正则表达式
+# pathlib - 路径操作
