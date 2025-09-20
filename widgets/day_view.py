@@ -15,12 +15,17 @@ class DayViewWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.selected_courses = []
+        self.custom_courses = []  # 存储自定义课程数据
         self.db = None
         self.init_ui()
     
     def set_database(self, db):
         """设置数据库连接"""
         self.db = db
+    
+    def set_custom_courses(self, custom_courses):
+        """设置自定义课程数据"""
+        self.custom_courses = custom_courses
     
     def init_ui(self):
         layout = QVBoxLayout()

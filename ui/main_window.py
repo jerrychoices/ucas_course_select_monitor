@@ -19,7 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import CourseDatabase
 from utils import TimeConflictChecker
-from widgets import MonthViewWidget, WeekViewWidget, DayViewWidget, StatisticsWidget
+from widgets import MonthViewWidget, WeekViewWidget, DayViewWidget, StatisticsWidget, CustomCourseDialog
 from export import ScheduleExporter
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ class CourseSelectionMainWindow(QMainWindow):
         super().__init__()
         self.db = CourseDatabase()
         self.selected_courses = []
+        self.custom_courses = []  # 存储自定义课程
         self.conflict_checker = TimeConflictChecker()
         self.schedule_exporter = ScheduleExporter()
         
@@ -176,6 +177,31 @@ class CourseSelectionMainWindow(QMainWindow):
         clear_btn.clicked.connect(self.clear_search)
         search_layout.addWidget(clear_btn)
         
+        # 添加自定义课程按钮
+        custom_course_btn = QPushButton("➕ 添加自定义课程")
+        custom_course_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #28a745, stop:1 #1e7e34);
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: 500;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #34ce57, stop:1 #28a745);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #1e7e34, stop:1 #155724);
+            }
+        """)
+        custom_course_btn.clicked.connect(self.show_custom_course_dialog)
+        search_layout.addWidget(custom_course_btn)
+        
         search_group.setLayout(search_layout)
         layout.addWidget(search_group)
         
@@ -290,29 +316,84 @@ class CourseSelectionMainWindow(QMainWindow):
             QMessageBox.critical(self, "错误", f"加载课程数据失败: {e}")
     
     def display_courses(self, courses):
-        """显示课程列表"""
-        self.course_table.setRowCount(len(courses))
+        """显示课程列表（包括数据库课程和自定义课程）"""
+        # 合并数据库课程和自定义课程
+        all_courses = list(courses)
         
-        for row, course in enumerate(courses):
+        # 添加自定义课程到列表
+        for custom_course in self.custom_courses:
+            # 自定义课程格式：(course_id, course_name, credits, hours, course_code)
+            # course_id 使用负数来区分自定义课程
+            custom_id = -(len(self.custom_courses) - self.custom_courses.index(custom_course))
+            course_data = (
+                custom_id,
+                custom_course.get('name', ''),
+                custom_course.get('credits', ''),
+                custom_course.get('hours', ''),
+                custom_course.get('code', '')
+            )
+            all_courses.append(course_data)
+        
+        self.course_table.setRowCount(len(all_courses))
+        
+        for row, course in enumerate(all_courses):
             course_id, course_name, credits, hours, course_code = course
             
             # 填充表格
-            self.course_table.setItem(row, 0, QTableWidgetItem(str(course_code or '')))
-            self.course_table.setItem(row, 1, QTableWidgetItem(str(course_name or '')))
-            self.course_table.setItem(row, 2, QTableWidgetItem(str(credits or '')))
-            self.course_table.setItem(row, 3, QTableWidgetItem(str(hours or '')))
+            code_item = QTableWidgetItem(str(course_code or ''))
+            name_item = QTableWidgetItem(str(course_name or ''))
+            credits_item = QTableWidgetItem(str(credits or ''))
+            hours_item = QTableWidgetItem(str(hours or ''))
+            
+            # 如果是自定义课程，用不同颜色标识
+            if course_id < 0:
+                for item in [code_item, name_item, credits_item, hours_item]:
+                    item.setBackground(QColor(240, 248, 255))  # 淡蓝色背景
+                    item.setToolTip("自定义课程")
+            
+            self.course_table.setItem(row, 0, code_item)
+            self.course_table.setItem(row, 1, name_item)
+            self.course_table.setItem(row, 2, credits_item)
+            self.course_table.setItem(row, 3, hours_item)
             
             # 存储课程ID
             self.course_table.item(row, 0).setData(Qt.UserRole, course_id)
     
     def search_courses(self):
-        """搜索课程"""
-        keyword = self.search_input.text().strip()
+        """搜索课程（包括自定义课程）"""
+        keyword = self.search_input.text().strip().lower()
         department = self.department_input.text().strip()
         
         try:
-            courses = self.db.search_courses(keyword, department)
-            self.display_courses(courses)
+            # 搜索数据库课程
+            courses = self.db.search_courses(self.search_input.text().strip(), department)
+            
+            # 如果有关键词搜索，还要搜索自定义课程
+            if keyword:
+                filtered_courses = []
+                # 过滤数据库课程
+                for course in courses:
+                    course_id, course_name, credits, hours, course_code = course
+                    if (keyword in str(course_name).lower() or 
+                        keyword in str(course_code).lower()):
+                        filtered_courses.append(course)
+                
+                # 搜索自定义课程
+                custom_filtered = []
+                for custom_course in self.custom_courses:
+                    name = str(custom_course.get('name', '')).lower()
+                    code = str(custom_course.get('code', '')).lower()
+                    if keyword in name or keyword in code:
+                        custom_filtered.append(custom_course)
+                
+                # 临时替换自定义课程列表用于显示
+                original_custom = self.custom_courses[:]
+                self.custom_courses = custom_filtered
+                self.display_courses(filtered_courses)
+                self.custom_courses = original_custom
+            else:
+                self.display_courses(courses)
+                
         except Exception as e:
             logger.error(f"Failed to search courses: {e}")
             QMessageBox.warning(self, "警告", f"搜索失败: {e}")
@@ -401,6 +482,11 @@ class CourseSelectionMainWindow(QMainWindow):
     
     def update_all_views(self):
         """更新所有视图"""
+        # 传递自定义课程数据给视图组件
+        self.month_view.set_custom_courses(self.custom_courses)
+        self.week_view.set_custom_courses(self.custom_courses)
+        self.day_view.set_custom_courses(self.custom_courses)
+        
         # 更新课程表视图
         self.month_view.update_schedule(self.selected_courses)
         self.week_view.update_schedule(self.selected_courses)
@@ -415,11 +501,21 @@ class CourseSelectionMainWindow(QMainWindow):
         conflicts = []
         
         # 获取新课程的时间安排
-        new_schedules = self.db.get_course_schedules(new_course_id)
+        if new_course_id < 0:
+            # 自定义课程
+            new_schedules = self.get_custom_course_schedules(new_course_id)
+        else:
+            # 数据库课程
+            new_schedules = self.db.get_course_schedules(new_course_id)
         
         # 获取已选课程的时间安排
         for course_id, course_name in self.selected_courses:
-            existing_schedules = self.db.get_course_schedules(course_id)
+            if course_id < 0:
+                # 自定义课程
+                existing_schedules = self.get_custom_course_schedules(course_id)
+            else:
+                # 数据库课程
+                existing_schedules = self.db.get_course_schedules(course_id)
             
             for new_schedule in new_schedules:
                 for existing_schedule in existing_schedules:
@@ -433,10 +529,16 @@ class CourseSelectionMainWindow(QMainWindow):
         conflicts = []
         
         for i, (course_id1, course_name1) in enumerate(self.selected_courses):
-            schedules1 = self.db.get_course_schedules(course_id1)
+            if course_id1 < 0:
+                schedules1 = self.get_custom_course_schedules(course_id1)
+            else:
+                schedules1 = self.db.get_course_schedules(course_id1)
             
             for j, (course_id2, course_name2) in enumerate(self.selected_courses[i+1:], i+1):
-                schedules2 = self.db.get_course_schedules(course_id2)
+                if course_id2 < 0:
+                    schedules2 = self.get_custom_course_schedules(course_id2)
+                else:
+                    schedules2 = self.db.get_course_schedules(course_id2)
                 
                 for schedule1 in schedules1:
                     for schedule2 in schedules2:
@@ -493,3 +595,82 @@ class CourseSelectionMainWindow(QMainWindow):
         """获取当前时间戳"""
         from datetime import datetime
         return datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    def show_custom_course_dialog(self):
+        """显示自定义课程对话框"""
+        dialog = CustomCourseDialog(self)
+        
+        if dialog.exec_() == CustomCourseDialog.Accepted:
+            course_data = dialog.get_course_data()
+            
+            # 检查课程代码是否重复
+            if self.is_course_code_duplicate(course_data.get('code', '')):
+                QMessageBox.warning(self, "警告", "课程代码已存在，请使用不同的代码")
+                return
+            
+            # 添加到自定义课程列表
+            self.custom_courses.append(course_data)
+            
+            # 刷新课程列表显示
+            self.refresh_course_display()
+            
+            QMessageBox.information(self, "成功", f"已添加自定义课程: {course_data.get('name', '')}")
+    
+    def is_course_code_duplicate(self, code):
+        """检查课程代码是否重复"""
+        if not code:
+            return False
+        
+        # 检查数据库中的课程
+        try:
+            courses = self.db.get_all_courses()
+            for course in courses:
+                if course[4] == code:  # course_code
+                    return True
+        except:
+            pass
+        
+        # 检查自定义课程
+        for custom_course in self.custom_courses:
+            if custom_course.get('code', '') == code:
+                return True
+        
+        return False
+    
+    def refresh_course_display(self):
+        """刷新课程显示"""
+        # 如果当前有搜索条件，重新执行搜索
+        if self.search_input.text().strip() or self.department_input.text().strip():
+            self.search_courses()
+        else:
+            self.load_courses()
+    
+    def get_custom_course_by_id(self, course_id):
+        """根据ID获取自定义课程"""
+        if course_id >= 0:
+            return None
+        
+        index = -(course_id + 1)
+        if 0 <= index < len(self.custom_courses):
+            return self.custom_courses[index]
+        return None
+    
+    def get_custom_course_schedules(self, course_id):
+        """获取自定义课程的时间安排"""
+        custom_course = self.get_custom_course_by_id(course_id)
+        if not custom_course:
+            return []
+        
+        schedules = []
+        for schedule in custom_course.get('schedules', []):
+            # 转换为数据库格式的时间安排
+            schedule_data = {
+                'weekday': schedule.get('weekday'),
+                'start_time': schedule.get('start_time'),
+                'end_time': schedule.get('end_time'),
+                'location': schedule.get('location', ''),
+                'weeks': schedule.get('weeks', '1-16')
+            }
+            schedules.append(schedule_data)
+        
+        return schedules

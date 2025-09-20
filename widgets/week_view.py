@@ -19,6 +19,7 @@ class WeekViewWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.selected_courses = []
+        self.custom_courses = []  # 存储自定义课程数据
         self.db = None
         self.current_week = 1  # 当前显示的周次
         
@@ -37,9 +38,44 @@ class WeekViewWidget(QWidget):
         
         self.init_ui()
     
+    def get_custom_course_by_id(self, course_id):
+        """根据ID获取自定义课程"""
+        if course_id >= 0:
+            return None
+        
+        index = -(course_id + 1)
+        if 0 <= index < len(self.custom_courses):
+            return self.custom_courses[index]
+        return None
+    
+    def get_custom_course_schedules(self, course_id):
+        """获取自定义课程的时间安排"""
+        custom_course = self.get_custom_course_by_id(course_id)
+        if not custom_course:
+            return []
+        
+        schedules = []
+        for schedule in custom_course.get('schedules', []):
+            # 转换为数据库格式的时间安排
+            # (weekday, time_slots, location, weeks, semester)
+            schedule_data = (
+                schedule.get('weekday'),
+                f"{schedule.get('start_time')}-{schedule.get('end_time')}",
+                schedule.get('location', ''),
+                schedule.get('weeks', '1-16'),
+                '1'  # 默认学期
+            )
+            schedules.append(schedule_data)
+        
+        return schedules
+    
     def set_database(self, db):
         """设置数据库连接"""
         self.db = db
+    
+    def set_custom_courses(self, custom_courses):
+        """设置自定义课程数据"""
+        self.custom_courses = custom_courses
     
     def init_ui(self):
         layout = QVBoxLayout()
@@ -258,7 +294,13 @@ class WeekViewWidget(QWidget):
         try:
             # 填充课程信息
             for course_id, course_name in self.selected_courses:
-                schedules = self.db.get_course_schedules(course_id)
+                # 获取课程时间安排
+                if course_id < 0:
+                    # 自定义课程
+                    schedules = self.get_custom_course_schedules(course_id)
+                else:
+                    # 数据库课程
+                    schedules = self.db.get_course_schedules(course_id)
                 
                 for schedule in schedules:
                     day_of_week, time_slots_str, location, weeks, semester = schedule
